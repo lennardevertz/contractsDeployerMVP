@@ -10,30 +10,9 @@ module.exports = {
         runs: 100,
       },
     },
-
   networks: {
     truffledashboard: {
       url: "http://localhost:24012/rpc"
-    },
-    optimisticEthereum: {
-      url: "https://mainnet.optimism.io",
-      // use some dummy PK
-      accounts: [
-          ""
-      ],
-    },
-    optimisticGoerli: {
-      url: "https://goerli.optimism.io",
-      // use some dummy PK
-      accounts: [
-          ""
-      ],
-    },
-  },
-  etherscan: {
-    apiKey: {
-      optimisticGoerli: "",
-      optimisticEthereum: "",
     },
   },
 };
