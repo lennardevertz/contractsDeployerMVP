@@ -13,7 +13,7 @@ error Payments__AlreadyPaidThisReceipt();
 error Payments__OnlyContractOwnerCanChangeOwnershipOfContract();
 error Payments__Ownable_NewContractOwnerIsTheZeroAddress();
 
-contract payments {
+contract PaymentsOld {
 
     using SafeMath for uint256;
     address public contractOwner = msg.sender; 

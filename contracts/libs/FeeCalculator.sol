@@ -13,10 +13,12 @@ import { AssetType, FeeType } from "../enums/IDrissEnums.sol";
 /**
  * @title FeeCalculator
  * @author Rafał Kalinowski <deliriusz.eth@gmail.com>
+ * @custom:contributor Lennard <@lennardevertz>
  * @notice This is an utility contract for calculating a fee
+ * @notice In this version we use Chainlink oracles for the fee calculation
  */
 contract FeeCalculator is Ownable {
-    AggregatorV3Interface internal immutable MATIC_USD_PRICE_FEED;
+    AggregatorV3Interface internal immutable NATIVE_USD_PRICE_FEED;
     uint256 public constant PAYMENT_FEE_SLIPPAGE_PERCENT = 5;
     uint256 public PAYMENT_FEE_PERCENTAGE = 10;
     uint256 public PAYMENT_FEE_PERCENTAGE_DENOMINATOR = 1000;
@@ -25,24 +27,24 @@ contract FeeCalculator is Ownable {
     // you have to pass your desired fee types in a constructor deriving this contract
     mapping (AssetType => FeeType) FEE_TYPE_MAPPING;
 
-    constructor(address _maticUsdAggregator) {
-        require(_maticUsdAggregator != address(0), "Address cannot be 0");
+    constructor(address _nativeUsdAggregator) {
+        require(_nativeUsdAggregator != address(0), "Address cannot be 0");
 
-        MATIC_USD_PRICE_FEED = AggregatorV3Interface(_maticUsdAggregator);
+        NATIVE_USD_PRICE_FEED = AggregatorV3Interface(_nativeUsdAggregator);
     }
 
     /*
     * @notice Get current amount of wei in a dollar
-    * @dev ChainLink officially supports only USD -> MATIC,
+    * @dev ChainLink officially supports only USD -> NATIVE,
     *      so we have to convert it back to get current amount of wei in a dollar
     */
     function _dollarToWei() internal view returns (uint256) {
-        (,int256 maticPrice,,,) = MATIC_USD_PRICE_FEED.latestRoundData();
-        require (maticPrice > 0, "Unable to retrieve MATIC price.");
+        (,int256 nativePrice,,,) = NATIVE_USD_PRICE_FEED.latestRoundData();
+        require (nativePrice > 0, "Unable to retrieve NATIVE price.");
 
-        uint256 maticPriceMultiplier = 10**MATIC_USD_PRICE_FEED.decimals();
+        uint256 nativePriceMultiplier = 10**NATIVE_USD_PRICE_FEED.decimals();
 
-        return(10**18 * maticPriceMultiplier) / uint256(maticPrice);
+        return(10**18 * nativePriceMultiplier) / uint256(nativePrice);
     }
 
     /**
@@ -84,7 +86,7 @@ contract FeeCalculator is Ownable {
         uint256 minimalPaymentFee = _getMinimumFee();
         uint256 paymentFee = getPaymentFee(_valueToSplit, _assetType);
 
-        // we accept slippage of matic price if fee type is not percentage - it this case we always get % no matter dollar price
+        // we accept slippage of native coin price if fee type is not percentage - it this case we always get % no matter dollar price
         if (FEE_TYPE_MAPPING[_assetType] != FeeType.Percentage
             && _valueToSplit >= minimalPaymentFee * (100 - PAYMENT_FEE_SLIPPAGE_PERCENT) / 100
             && _valueToSplit <= minimalPaymentFee) {

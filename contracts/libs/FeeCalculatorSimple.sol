@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
-
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
@@ -13,7 +11,9 @@ import { AssetType, FeeType } from "../enums/IDrissEnums.sol";
 /**
  * @title FeeCalculator
  * @author Rafał Kalinowski <deliriusz.eth@gmail.com>
+ * @custom:contributor Lennard (levertz)
  * @notice This is an utility contract for calculating a fee
+ * @notice In this simlified version, we don't use (chainlink) oracles, but a constant (adjustable) fee
  */
 contract FeeCalculator is Ownable {
     uint256 public constant PAYMENT_FEE_SLIPPAGE_PERCENT = 5;
@@ -66,7 +66,7 @@ contract FeeCalculator is Ownable {
         uint256 minimalPaymentFee = _getMinimumFee();
         uint256 paymentFee = getPaymentFee(_valueToSplit, _assetType);
 
-        // we accept slippage of matic price if fee type is not percentage - it this case we always get % no matter dollar price
+        // we accept slippage of native coin price if fee type is not percentage - it this case we always get % no matter dollar price
         if (FEE_TYPE_MAPPING[_assetType] != FeeType.Percentage
             && _valueToSplit >= minimalPaymentFee * (100 - PAYMENT_FEE_SLIPPAGE_PERCENT) / 100
             && _valueToSplit <= minimalPaymentFee) {
@@ -96,12 +96,9 @@ contract FeeCalculator is Ownable {
 
     /**
     * @notice adjust minimal payment fee for all asset transfers
-    * @dev Solidity is not good when it comes to handling floats. We use denominator then,
-    *      e.g. to set minimal payment fee to 2.2$ , just pass paymentFee = 22 & denominator = 10 => 22 / 10 = 2.2
     */
     function changeMinimalPaymentFee (uint256 _minimalPaymentFee) external onlyOwner {
         require(_minimalPaymentFee > 0, "Payment fee has to be bigger than 0");
-
         MINIMAL_PAYMENT_FEE = _minimalPaymentFee;
     }
 }
