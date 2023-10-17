@@ -10,33 +10,36 @@ import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 
 import { ITipping } from "./interfaces/ITipping.sol";
 import { MultiAssetSender } from "./libs/MultiAssetSender.sol";
-import { FeeCalculator } from "./libs/FeeCalculatorZK.sol";
+import { FeeCalculator } from "./libs/FeeCalculatorSimple.sol";
+import { PublicGoodAttester } from "./libs/Attestation.sol";
 import { Batchable } from "./libs/Batchable.sol";
 
 import { AssetType, FeeType } from "./enums/IDrissEnums.sol";
 
 error tipping__withdraw__OnlyAdminCanWithdraw();
+error unknown_function_selector();
 
 /**
  * @title Tipping
  * @author Lennard (lennardevertz)
  * @custom:contributor Rafał Kalinowski <deliriusz.eth@gmail.com>
  * @notice Tipping is a helper smart contract used for IDriss social media tipping functionality
- * @notice This contract was modified by @lennardevertz for usage in ETHGlobal Lisbon 2023
+ * @notice This contract features Public Good Attestations but no oracles for fee calculation
  */
-contract TippingZK is Ownable, ITipping, MultiAssetSender, FeeCalculator, Batchable, IERC165 {
-    address public contractOwner;
-    mapping(address => uint256) public balanceOf;
+contract Tipping is Ownable, ITipping, MultiAssetSender, FeeCalculator, PublicGoodAttester, Batchable, IERC165 {
     mapping(address => bool) public admins;
+    mapping(address => bool) public publicGoods;
 
     event TipMessage(
         address indexed recipientAddress,
         string message,
         address indexed sender,
-        address indexed tokenAddress
+        address indexed tokenAddress,
+        uint256 amount,
+        uint256 fee
     );
 
-    constructor() {
+    constructor(address _eas) PublicGoodAttester(_eas) {
         admins[msg.sender] = true;
 
         FEE_TYPE_MAPPING[AssetType.Coin] = FeeType.Percentage;
@@ -54,10 +57,16 @@ contract TippingZK is Ownable, ITipping, MultiAssetSender, FeeCalculator, Batcha
         string memory _message
     ) external payable override {
         uint256 msgValue = _MSG_VALUE > 0 ? _MSG_VALUE : msg.value;
-        (, uint256 paymentValue) = _splitPayment(msgValue, AssetType.Coin);
+        if (publicGoods[_recipient]) {
+            paymentValue = msgValue;
+            _attestDonor(_recipient);
+        } else {
+            (, uint256 paymentValue) = _splitPayment(msgValue, AssetType.Coin);
+        }
+        
         _sendCoin(_recipient, paymentValue);
 
-        emit TipMessage(_recipient, _message, msg.sender, address(0));
+        emit TipMessage(_recipient, _message, msg.sender, address(0), paymentValue, msgValue-paymentValue);
     }
 
     /**
@@ -69,12 +78,17 @@ contract TippingZK is Ownable, ITipping, MultiAssetSender, FeeCalculator, Batcha
         address _tokenContractAddr,
         string memory _message
     ) external payable override {
-        (, uint256 paymentValue) = _splitPayment(_amount, AssetType.Token);
+        if (publicGoods[_recipient]) {
+            paymentValue = _amount;
+            _attestDonor(_recipient);
+        } else {
+            (, uint256 paymentValue) = _splitPayment(_amount, AssetType.Token);
+        }
 
         _sendTokenAssetFrom(_amount, msg.sender, address(this), _tokenContractAddr);
         _sendTokenAsset(paymentValue, _recipient, _tokenContractAddr);
 
-        emit TipMessage(_recipient, _message, msg.sender, _tokenContractAddr);
+        emit TipMessage(_recipient, _message, msg.sender, _tokenContractAddr, paymentValue, _amount-paymentValue);
     }
 
     /**
@@ -88,11 +102,11 @@ contract TippingZK is Ownable, ITipping, MultiAssetSender, FeeCalculator, Batcha
     ) external payable override {
         // we use it just to revert when value is too small
         uint256 msgValue = _MSG_VALUE > 0 ? _MSG_VALUE : msg.value;
-        _splitPayment(msgValue, AssetType.NFT);
+        (uint256 fee,) = _splitPayment(msgValue, AssetType.NFT);
 
         _sendNFTAsset(_tokenId, msg.sender, _recipient, _nftContractAddress);
 
-        emit TipMessage(_recipient, _message, msg.sender, _nftContractAddress);
+        emit TipMessage(_recipient, _message, msg.sender, _nftContractAddress, msgValue, fee);
     }
 
     /**
@@ -107,11 +121,11 @@ contract TippingZK is Ownable, ITipping, MultiAssetSender, FeeCalculator, Batcha
     ) external payable override {
         // we use it just to revert when value is too small
         uint256 msgValue = _MSG_VALUE > 0 ? _MSG_VALUE : msg.value;
-        _splitPayment(msgValue, AssetType.ERC1155);
+        (uint256 fee,) = _splitPayment(msgValue, AssetType.ERC1155);
 
         _sendERC1155Asset(_assetId, _amount, msg.sender, _recipient, _assetContractAddress);
 
-        emit TipMessage(_recipient, _message, msg.sender, _assetContractAddress);
+        emit TipMessage(_recipient, _message, msg.sender, _assetContractAddress, msgValue, fee);
     }
 
     /**
@@ -164,6 +178,20 @@ contract TippingZK is Ownable, ITipping, MultiAssetSender, FeeCalculator, Batcha
     }
 
     /**
+     * @notice Add public goods address with priviledged fee structure
+     */
+    function addPublicGood(address publicGoodAddress) external onlyOwner {
+        publicGoods[publicGoodAddress] = true;
+    }
+
+    /**
+     * @notice Remove public goods address
+     */
+    function deletePublicGood(address publicGoodAddress) external onlyOwner {
+        delete publicGoods[publicGoodAddress];
+    }
+
+    /**
     * @notice This is a function that allows for multicall
     * @param _calls An array of inputs for each call.
     * @dev calls Batchable::callBatch
@@ -190,10 +218,12 @@ contract TippingZK is Ownable, ITipping, MultiAssetSender, FeeCalculator, Batcha
             }
         } else if (_selector == this.sendTokenTo.selector) {
             currentCallPriceAmount = getPaymentFee(0, AssetType.Token);
-        } else if (_selector == this.sendTokenTo.selector) {
+        } else if (_selector == this.sendERC721To.selector) {
             currentCallPriceAmount = getPaymentFee(0, AssetType.NFT);
-        } else {
+        } else if (_selector == this.sendERC1155To.selector) {
             currentCallPriceAmount = getPaymentFee(0, AssetType.ERC1155);
+        } else {
+            revert unknown_function_selector();
         }
 
         return currentCallPriceAmount;

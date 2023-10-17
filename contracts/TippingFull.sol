@@ -26,8 +26,7 @@ error unknown_function_selector();
  * @notice Tipping is a helper smart contract used for IDriss social media tipping functionality
  * @notice This contract features Public Good Attestations and Chainlink oracles for fee calculation
  */
-contract TippingPG is Ownable, ITipping, MultiAssetSender, FeeCalculator, PublicGoodAttester, Batchable, IERC165 {
-    address public contractOwner;
+contract Tipping is Ownable, ITipping, MultiAssetSender, FeeCalculator, PublicGoodAttester, Batchable, IERC165 {
     mapping(address => bool) public admins;
     mapping(address => bool) public publicGoods;
 
