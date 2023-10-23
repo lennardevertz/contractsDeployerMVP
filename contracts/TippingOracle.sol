@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.17;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { IERC165 } from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { IERC721 } from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import { IERC1155 } from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 
 import { ITipping } from "./interfaces/ITipping.sol";
 import { MultiAssetSender } from "./libs/MultiAssetSender.sol";
@@ -25,7 +25,7 @@ error unknown_function_selector();
  * @notice Tipping is a helper smart contract used for IDriss social media tipping functionality
  * @notice This simplified version does not use attestations
  */
-contract Tipping is Ownable, ITipping, MultiAssetSender, FeeCalculator, Batchable, IERC165 {
+contract TippingOracle is Ownable, ITipping, MultiAssetSender, FeeCalculator, Batchable, IERC165 {
     mapping(address => bool) public admins;
     mapping(address => bool) public publicGoods;
 
@@ -56,10 +56,11 @@ contract Tipping is Ownable, ITipping, MultiAssetSender, FeeCalculator, Batchabl
         string memory _message
     ) external payable override {
         uint256 msgValue = _MSG_VALUE > 0 ? _MSG_VALUE : msg.value;
+        uint256 paymentValue;
         if (publicGoods[_recipient]) {
             paymentValue = msgValue;
         } else {
-            (, uint256 paymentValue) = _splitPayment(msgValue, AssetType.Coin);
+            (, paymentValue) = _splitPayment(msgValue, AssetType.Coin);
         }
         
         _sendCoin(_recipient, paymentValue);
@@ -76,10 +77,11 @@ contract Tipping is Ownable, ITipping, MultiAssetSender, FeeCalculator, Batchabl
         address _tokenContractAddr,
         string memory _message
     ) external payable override {
+        uint256 paymentValue;
         if (publicGoods[_recipient]) {
             paymentValue = _amount;
         } else {
-            (, uint256 paymentValue) = _splitPayment(_amount, AssetType.Token);
+            (, paymentValue) = _splitPayment(_amount, AssetType.Token);
         }
 
         _sendTokenAssetFrom(_amount, msg.sender, address(this), _tokenContractAddr);

@@ -39,4 +39,8 @@ interface ITipping {
     function addAdmin(address _adminAddress) external;
 
     function deleteAdmin(address _adminAddress) external;
+
+    function addPublicGood(address _publicGoodAddress) external;
+
+    function deletePublicGood(address _publicGoodAddress) external;
 }
